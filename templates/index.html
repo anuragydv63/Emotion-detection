@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Emotion Detection</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title"><i class="fas fa-smile"></i> Emotion Detection</h1>
+            <p class="subtitle">Real-time facial expression analysis</p>
+        </header>
+
+        <main class="main-content">
+            <section class="video-section">
+                <div class="video-container">
+                    <img src="{{ url_for('video_feed') }}" alt="Live video feed" class="video-feed">
+                    <div class="video-overlay" id="loading-overlay">
+                        <div class="spinner"></div>
+                        <p>Initializing camera...</p>
+                    </div>
+                </div>
+                <div class="video-controls">
+                    <button id="voice-toggle" class="control-btn">
+                        <i class="fas fa-volume-up"></i> Enable Voice
+                    </button>
+                </div>
+            </section>
+
+            <section class="dashboard-section">
+                <div class="emotion-card">
+                    <h2><i class="fas fa-heartbeat"></i> Current Emotion</h2>
+                    <div class="emotion-display">
+                        <div class="emoji" id="emoji">😐</div>
+                        <div class="emotion-info">
+                            <div class="emotion-name" id="emotion-text">Neutral</div>
+                            <div class="emotion-streak" id="emotion-streak">First detection</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-card">
+                    <h2><i class="fas fa-chart-pie"></i> Emotion Statistics</h2>
+                    <div class="stats-grid" id="stats-grid"></div>
+                </div>
+
+                <div class="history-card">
+                    <h2><i class="fas fa-history"></i> Recent History</h2>
+                    <div class="history-list" id="history-list"></div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Emotion Detection System © <span id="year"></span></p>
+        </footer>
+    </div>
+
+    <script>
+        // Set current year in footer
+        document.getElementById("year").textContent = new Date().getFullYear();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const emojiElement = document.getElementById('emoji');
+            const emotionText = document.getElementById('emotion-text');
+            const emotionStreak = document.getElementById('emotion-streak');
+            const statsGrid = document.getElementById('stats-grid');
+            const historyList = document.getElementById('history-list');
+            const voiceToggle = document.getElementById('voice-toggle');
+            const loadingOverlay = document.getElementById('loading-overlay');
+
+            const emojiMap = {
+                'happy': '😊',
+                'sad': '😢',
+                'angry': '😠',
+                'surprise': '😲',
+                'neutral': '😐',
+                'fear': '😨',
+                'disgust': '🤢'
+            };
+
+            const colorMap = {
+                'happy': '#4CAF50',
+                'sad': '#2196F3',
+                'angry': '#F44336',
+                'surprise': '#FFC107',
+                'neutral': '#9E9E9E',
+                'fear': '#673AB7',
+                'disgust': '#795548'
+            };
+
+            let voiceEnabled = false;
+
+            // Hide loading screen
+            setTimeout(() => {
+                loadingOverlay.style.opacity = '0';
+                setTimeout(() => {
+                    loadingOverlay.style.display = 'none';
+                }, 500);
+            }, 3000);
+
+            // Update dashboard with emotion data
+            function updateDashboard(data) {
+                if (!data.current_emotion) return;
+
+                // Set current emotion
+                emojiElement.textContent = emojiMap[data.current_emotion] || '😐';
+                emotionText.textContent = data.current_emotion.charAt(0).toUpperCase() + data.current_emotion.slice(1);
+                emotionText.style.color = colorMap[data.current_emotion] || '#000';
+
+                // Set streak
+                emotionStreak.textContent = data.current_streak?.count > 1 ?
+                    `${data.current_streak.count} times in a row` :
+                    'First detection';
+
+                // Update stats
+                statsGrid.innerHTML = '';
+                for (const [emotion, count] of Object.entries(data.emotion_counts || {})) {
+                    const barWidth = (count / Math.max(1, data.emotion_counts[data.current_emotion])) * 100;
+                    statsGrid.innerHTML += `
+                        <div class="stat-item">
+                            <div class="stat-emoji">${emojiMap[emotion] || '❓'}</div>
+                            <div class="stat-label">${emotion}</div>
+                            <div class="stat-value">${count}</div>
+                            <div class="stat-bar" style="width: ${barWidth}%; background-color: ${colorMap[emotion] || '#4285f4'}"></div>
+                        </div>
+                    `;
+                }
+
+                // Update history
+                historyList.innerHTML = '';
+                data.history?.forEach(([time, emotion]) => {
+                    historyList.innerHTML += `
+                        <div class="history-item">
+                            <span class="history-time">${time}</span>
+                            <span class="history-emoji">${emojiMap[emotion] || '❓'}</span>
+                            <span class="history-emotion" style="color: ${colorMap[emotion] || '#000'}">${emotion}</span>
+                        </div>
+                    `;
+                });
+            }
+
+            // Fetch data
+            function fetchEmotionData() {
+                fetch('/get_emotion_data')
+                    .then(response => {
+                        const contentType = response.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            return response.json();
+                        } else {
+                            throw new TypeError("Expected JSON, got something else.");
+                        }
+                    })
+                    .then(updateDashboard)
+                    .catch(console.error);
+            }
+
+            setInterval(fetchEmotionData, 1000);
+            fetchEmotionData();
+
+            // Voice toggle button
+            voiceToggle.addEventListener('click', () => {
+                voiceEnabled = !voiceEnabled;
+                fetch('/toggle_voice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                voiceToggle.innerHTML = voiceEnabled ?
+                    '<i class="fas fa-volume-mute"></i> Disable Voice' :
+                    '<i class="fas fa-volume-up"></i> Enable Voice';
+                voiceToggle.classList.toggle('active');
+            });
+        });
+    </script>
+</body>
+</html>
