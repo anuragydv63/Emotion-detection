@@ -36,9 +36,3 @@ This project detects human emotions in real-time using webcam input and provides
 
 ---
 
-## ⚙️ Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-username/emotion-detection-tts.git
-   cd emotion-detection-tts
